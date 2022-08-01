@@ -1,0 +1,33 @@
+# Azure CLI Commands to create all the Azure prerequisites needed for Zscaler Cloud Connector
+# Don't forget to replace all the "Examples" in the Azure CLI command parameters
+
+#1. Run these commands to get the information you will need for the rest of the commands
+
+az account show --query tenantId --output tsv # Displays the Azure Tenant Id
+az account show --query id --output tsv # Displays the Azure Subscription Id
+az account show --query name --output tsv # Displays Azue Subscription Name
+az account list-locations --query "[].{Name:name}" -o tsv | sort # Obtain and Displays a list of all the Azure regions
+
+# 2. Create Azure Service Principal [only needed if deploy Cloud Connector using Terraform. Skip if using Azure Resrouce Manager]
+az ad sp create-for-rbac --role="Contributor" --scopes="/subscriptions/ExampleAzureSubscriptionId" --name "ExampleServicePrincipalName"
+
+# 3. Create Azure Resource Group for these objects
+az group create --name "ExampleRessourceGroupName" -l "ExampleAzureRegion"
+
+# 4. Create Azure Managed Identity with Network Contributor Role
+az identity create --name "ExampleManagedIdentityName" --resource-group "ExampleResourceGroupName" --location "ExampleAzureRegion"  # Creates the Managed Identity
+az resource show --id "/subscriptions/ExampleAzureSubscriptionId/resourceGroups/ExampleResourceGroupName/providers/Microsoft.ManagedIdentity/userAssignedIdentities/ExampleManagedIdentityName" --query "properties.principalId" -o tsv # Obtains the Managed Identity Id for the next commands
+az role assignment create --assignee-object-id "ExampleManagedIdentityId" --assignee-principal-type "ServicePrincipal" --role "Network Contributor" --scope "/subscriptions/ExampleAzureSubscriptionId" # Assigns the Network Contributor Role to the Managed Identity
+
+# 5. Create Azure Key Vault with Secrets
+az keyvault create --name "ExampleUniqueKeyvaultName" --resource-group "ExampleResourceGroupName" --location "ExampleAzureRegion" --enabled-for-template-deployment true    # Creates a new Key Vault
+az keyvault set-policy --name "ExampleUniqueKeyvaultName" --object-id "ExampleManagedIdentityId" --secret-permissions get list  # Assigns Key Vault Get, List permissions to the Managed Identity
+az keyvault secret set --vault-name "ExampleUniqueKeyvaultName" --name "api-key" --value "ExampleCloudConnectorApiKey"  # Adds the api-key secret for Cloud Connector to the Key Vault
+az keyvault secret set --vault-name "ExampleUniqueKeyvaultName" --name "username" --value "ExampleCloudConnectorAdminUsername"  # Adds the username  secret for Cloud Connector to the Key Vault
+az keyvault secret set --vault-name "ExampleUniqueKeyvaultName" --name "password" --value "ExampleCloudConnectorAdminPassword"  # Adds the password secret for Cloud Connector to the Key Vault
+
+# 6. Creates Azure SSH Key Pair [azure resource manager only]
+az sshkey create --location "ExampleAzureRegion" --resource-group "ExampleRessourceGroupName" --name "ExampleSshKeyPairName"
+
+# 7. Accepts the Azure Marketplace Terms for Zscaler Cloud Connector
+az vm image terms accept --urn zscaler1579058425289:zia_cloud_connector:zs_ser_cc_03:latest
